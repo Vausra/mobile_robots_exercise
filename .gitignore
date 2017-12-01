@@ -102,3 +102,7 @@ ENV/
 
 # Linux
 .directory
+
+# exercise
+*.pdf
+**/RoboLabor_AIN/
