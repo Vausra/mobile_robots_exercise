@@ -1,26 +1,13 @@
-import sys
-
-sys.path.insert(0, './RoboLabor_AIN/HTWG_Robot_Simulator_AIN_V1/')
-
 import numpy as np
 import RoboLabor_AIN.HTWG_Robot_Simulator_AIN_V1.Robot as Robot
 import RoboLabor_AIN.HTWG_Robot_Simulator_AIN_V1.emptyWorld as Empty_World
 import math
-import time
 
 # robot_position: actual position of the robot
 # target_position: Target position for the robot
 # radian: area around target position.
 def check_target_area(robot_position, target, tolerance):
     return np.abs(target[0] - robot_position[0]) < tolerance and np.abs(target[1] - robot_position[1]) < tolerance
-
-
-def curve_drive(velocity, radian, delta_theta):
-    omega = velocity / radian
-    steps = int(abs(delta_theta / omega) * abs(myRobot.getTimeStep() * 10))
-
-    for i in range(0, steps):
-        myRobot.move([velocity, omega])
 
 
 # returns gradient of the given vector
@@ -119,7 +106,9 @@ def calc_regulator(p_start, v_start_end, e_prev=0):
 def follow_line(p_start, p_dest, vel,  tolerance, pd_regulator):
 
     v_start_end = [p_dest[0] - p_start[0], p_dest[1] - p_start[1]]
+
     robot_pos = myWorld.getTrueRobotPose()
+
     e_prev = 0
 
     while not check_target_area(robot_pos, p_dest, tolerance):
@@ -138,13 +127,14 @@ def follow_line(p_start, p_dest, vel,  tolerance, pd_regulator):
         e_prev = e
 
     print("Target Reached!")
-    time.sleep(5)
 
 # p_start: From where to start movement
 # p_dest: Goal
 # vel: Velocity
 # tolerance: Tolerance for target area
 # pd_regulator: with or without d-regulator
+#
+# go to a startpoint -> follow in imaginary line
 def goto_global(p_start, p_dest, vel, tolerance, pd_regulator):
 
     #follow_line(_p_start, _p_end, TOLERANCE, pd_regulator=True)
@@ -153,20 +143,38 @@ def goto_global(p_start, p_dest, vel, tolerance, pd_regulator):
     robot_pos = myWorld.getTrueRobotPose()
 
     # Check if robot is very close to start position
-    if not check_target_area(robot_pos, p_start, tolerance=0.3):
+    if not check_target_area(robot_pos, p_start, tolerance):
+
         tmp_start = robot_pos
         tmp_dest = p_start
+        turn_robot_towards_target(tmp_dest)
         follow_line(tmp_start, tmp_dest, vel, tolerance, pd_regulator)
+
+    turn_robot_towards_target(p_dest)
     follow_line(p_start, p_dest, vel, tolerance, pd_regulator)
-    return 1
 
 
-#
+
+# follow line after line
 def follow_polyline(polyline, vel, tolerance, pd_regulator):
 
     for point in polyline:
         goto_global(point[0], point[1], vel, tolerance, pd_regulator)
-    return 1
+
+
+# if the robot doesn't point to target turn it as long as it does
+def turn_robot_towards_target(p_dest):
+    p_robot = myWorld.getTrueRobotPose()
+    angle_world_point = np.abs(np.arctan2(p_dest[1] - p_robot[1], p_dest[0] - p_robot[0]) * 180 / math.pi)
+
+
+    while True:
+        robot_angle_world = np.abs(p_robot[2] * 180 / math.pi)
+
+        if math.isclose(robot_angle_world, angle_world_point, rel_tol=1e-1):
+            break
+        myRobot.move([0, 1])
+        p_robot = myWorld.getTrueRobotPose()
 
 
 if __name__ == "__main__":
@@ -175,12 +183,12 @@ if __name__ == "__main__":
     # Setup world and place robot
 
     # Because T= 0.1 in the robot as default
-    STEPS_PER_SEC = 10
+    STEPS_PER_SEC = 5
     MAX_SPEED = 1
     SPEED = MAX_SPEED / STEPS_PER_SEC
 
     # Tolerance for target are
-    TOLERANCE = 0.3
+    TOLERANCE = 0.1
 
     # Weight for the two regulators
     # according to lecture 3 slide 32
@@ -212,8 +220,11 @@ if __name__ == "__main__":
 
     # start with wrong direction
     # pi / 2 says rotation of the robot corresponding to the map (90 degrees)
-    myWorld.setRobot(myRobot, [_p_start[0], _p_start[1], math.pi/360])
+    myWorld.setRobot(myRobot, [_p_start[0]+1, _p_start[1]+1, -2])
 
     #follow_line(_p_start, _p_end_1, SPEED, TOLERANCE, pd_regulator)
-    #goto_global(_p_start, _p_end, SPEED, TOLERANCE, pd_regulator)
+    #goto_global(_p_start, _p_end_1, SPEED, TOLERANCE, pd_regulator)
     follow_polyline(nav_points, SPEED, TOLERANCE, pd_regulator)
+
+    # keep window open
+    input()

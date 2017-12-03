@@ -1,7 +1,6 @@
 import sys
 sys.path.insert(0, '../../RoboLabor_AIN/HTWG_Robot_Simulator_AIN_V1/')
 
-import time
 from math import *
 import emptyWorld
 import Robot
@@ -42,16 +41,9 @@ if __name__ == "__main__":
 
     # motion_circle = [[1, -24 * pi / 180]] #24 degree per step
     # T = 0.1
-    # omega = 25 Grad/sec
+    # omega = 25 degree/sec
     # n = 150
-    # -> 360 Grad
-    '''
-    straigth_drive(0.1, n)
-    curve_drive(0.1, 2, pi)
-    straigth_drive(0.1, n)
-    curve_drive(0.1, -2, pi)
-    straigth_drive(0.1, n)
-    '''
+    # -> 360 degree
 
     for movement in range(0, NUMBER_MOVEMENTS):
         mv = movement % 3
