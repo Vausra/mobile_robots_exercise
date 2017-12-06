@@ -1,15 +1,16 @@
 import numpy as np
 import math
-
 import sys
 sys.path.append('./RoboLabor_AIN/HTWG_Robot_Simulator_AIN_V1')
 
 import Robot as Robot
 import emptyWorld as Empty_World
+import OdometryPoseEstimator as Odometry_Pose_Estimator
+import SensorUtilities as Sensor_Utilities
 
 # robot_position: actual position of the robot
 # target_position: Target position for the robot
-# radian: area around target position.
+# tolerance: area around target position.
 def check_target_area(robot_position, target, tolerance):
     return np.abs(target[0] - robot_position[0]) < tolerance and np.abs(target[1] - robot_position[1]) < tolerance
 
@@ -121,7 +122,11 @@ def follow_line(p_start, p_end, tolerance, pd_regulator):
         else:
             omega = p_regulator
 
-        myRobot.move([vel, omega])
+        move_command = [vel, omega]
+
+        myRobot.move(move_command)
+
+        pos_estimator.integrateMovement(move_command, myRobot.getSigmaMotion())
 
         robot_pos = myWorld.getTrueRobotPose()
 
@@ -129,53 +134,96 @@ def follow_line(p_start, p_end, tolerance, pd_regulator):
 
     print("Target Reached!")
 
-# p_start: From where to start movement
-# p_dest: Goal
-# vel: Velocity
-# tolerance: Tolerance for target area
-# pd_regulator: with or without d-regulator
-#
-# go to a startpoint -> follow in imaginary line
-def goto_global(p_start, p_dest, tolerance, pd_regulator):
-
-    #follow_line(_p_start, _p_end, TOLERANCE, pd_regulator=True)
-    # check_target_area(robot_position, target, radian)
-
-    robot_pos = myWorld.getTrueRobotPose()
-
-    # Check if robot is very close to start position
-    if not check_target_area(robot_pos, p_start, tolerance):
-
-        tmp_start = robot_pos
-        tmp_dest = p_start
-        turn_robot_towards_target(tmp_dest)
-        follow_line(tmp_start, tmp_dest, tolerance, pd_regulator)
-
-    turn_robot_towards_target(p_dest)
-    follow_line(p_start, p_dest, tolerance, pd_regulator)
-
-
-
-# follow line after line
-def follow_polyline(polyline, tolerance, pd_regulator):
-
-    for point in polyline:
-        goto_global(point[0], point[1], tolerance, pd_regulator)
-
-
 # if the robot doesn't point to target turn it as long as it does
 def turn_robot_towards_target(p_dest):
     p_robot = myWorld.getTrueRobotPose()
-    angle_world_point = np.abs(np.arctan2(p_dest[1] - p_robot[1], p_dest[0] - p_robot[0]) * 180 / np.pi)
+    angle_world_point = np.abs(np.arctan2(p_dest[1] - p_robot[1], p_dest[0] - p_robot[0]) * 180 / math.pi)
 
 
     while True:
-        robot_angle_world = np.abs(p_robot[2] * 180 / np.pi)
+        robot_angle_world = np.abs(p_robot[2] * 180 / math.pi)
 
         if math.isclose(robot_angle_world, angle_world_point, rel_tol=1e-1):
             break
         myRobot.move([0, 1])
         p_robot = myWorld.getTrueRobotPose()
+
+
+def follow_wall(p_dest, tolerance):
+    while not check_target_area(pos_estimator.getPose(), p_dest, tolerance):
+        walls = detect_walls()
+        left_wall_rel = get_left_wall(walls)
+
+        if left_wall_rel is None:
+            break
+
+        left_wall_pres = Sensor_Utilities.transform([left_wall_rel], myWorld.getTrueRobotPose())[0]
+        myWorld.drawPolylines([left_wall_pres])
+
+        left_wall = [[round(left_wall_pres[0][0], 1), round(left_wall_pres[0][1], 1)],
+                     [round(left_wall_pres[1][0], 1), round(left_wall_pres[1][1], 1)]]
+
+        target_line = parallel_line(left_wall, 0.5)
+        follow_line(target_line[1], target_line[0], SPEED, target_line[0], TOLERANCE)
+
+
+def detect_walls():
+    dists = myRobot.sense()
+    directions = myRobot.getSensorDirections()
+    return Sensor_Utilities.extractLinesFromSensorData(dists, directions)
+
+
+# Berechnet den absoluten Winkel einer Line
+def calc_line_angle(line):
+    p1 = line[0]
+    p2 = line[1]
+
+    delta_x = p2[0] - p1[0]
+    delta_y = p2[1] - p1[1]
+
+    if delta_x == 0:
+        return  # TODO
+
+    return math.atan(delta_y / delta_x)
+
+
+# Gibt eine parallele Linie mit Abstand dist zurueck.
+def parallel_line(line, dist):
+    alpha = calc_line_angle(line)
+
+    alpha = abs(alpha)
+
+    if alpha == 0:
+        dist_x = 0
+        dist_y = dist
+
+    elif math.degrees(alpha) == 90:
+        dist_x = dist
+        dist_y = 0
+
+    elif math.degrees(alpha) < 45:
+        dist_x = dist / math.sin(alpha)
+        dist_y = dist / math.cos(alpha)
+
+    elif math.degrees(alpha) > 45:
+        beta = 180 - 90 - alpha
+        dist_x = math.cos(beta) * dist
+        dist_y = dist / math.sin(beta)
+
+    elif math.degrees(alpha) == 45:
+        dist_x = dist / math.sin(alpha)
+        dist_y = dist_x
+
+    return [[line[0][0] - dist_x, line[0][1] - dist_y], [line[1][0] - dist_x, line[1][1] - dist_y]]
+
+
+# Gets a List of walls and returns the left wall
+def get_left_wall(walls):
+    for wall in walls:
+        p2x_wall = wall[0][0]
+        p2y_wall = wall[0][1]
+        if p2y_wall > 0 < p2x_wall:  # Ist eine Linke Wand, da y < 0
+            return wall
 
 
 if __name__ == "__main__":
@@ -199,6 +247,13 @@ if __name__ == "__main__":
     myWorld = Empty_World.buildWorld()
     myRobot = Robot.Robot()
 
+    pos_estimator = Odometry_Pose_Estimator.OdometryPoseEstimator()
+    sigma_pose = np.zeros((3, 3))
+    sigma_pose[0, 0] = 0.2 ** 2
+    sigma_pose[1, 1] = 0.2 ** 2
+    sigma_pose[2, 2] = (5 * math.pi / 180) ** 2
+
+
     # set this false to run without d-regulator
     pd_regulator = True
 
@@ -206,7 +261,7 @@ if __name__ == "__main__":
     start_point_y = 6.0
 
     end_point_1_x = 6.0
-    end_point_1_y = 1.0
+    end_point_1_y = 12.0
 
     end_point_2_x = 10.0
     end_point_2_y = 15.0
@@ -217,15 +272,19 @@ if __name__ == "__main__":
 
     nav_points = [[_p_start, _p_end_1],[_p_end_1, _p_end_2]]
 
+    ROBOT_START_POSE = [_p_start[0], _p_start[1]-1, math.pi]
+
     myWorld.drawPolyline([_p_start, _p_end_1, _p_end_2])
+
+    pos_estimator.setInitialCovariance(sigma_pose)
+    pos_estimator.setInitialPose(ROBOT_START_POSE)
 
     # start with wrong direction
     # pi / 2 says rotation of the robot corresponding to the map (90 degrees)
-    myWorld.setRobot(myRobot, [_p_start[0], _p_start[1]-2, -2])
+    myWorld.setRobot(myRobot, ROBOT_START_POSE)
 
-    #follow_line(_p_start, _p_end_1, TOLERANCE, pd_regulator)
-    #goto_global(_p_start, _p_end_1, TOLERANCE, pd_regulator)
-    follow_polyline(nav_points, TOLERANCE, pd_regulator)
+    follow_line(_p_start, _p_end_1, TOLERANCE, pd_regulator)
+    #follow_wall([10.5, 6], TOLERANCE)
 
     # keep window open
     input()
