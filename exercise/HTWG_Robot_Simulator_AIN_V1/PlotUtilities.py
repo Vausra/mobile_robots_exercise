@@ -70,8 +70,8 @@ def plotPoseCovariance(pose, sigma_pose, color = 'b'):
 def plotShow():
     plt.axis('equal')
     plt.grid()
-    #plt.show()
-    plt.show(block=False)
+    plt.show()
+    #plt.show(block=False)
     #time.sleep(2)
     #plt.close()
     return
