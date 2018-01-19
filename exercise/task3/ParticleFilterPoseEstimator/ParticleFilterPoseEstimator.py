@@ -8,33 +8,27 @@ from HTWG_Robot_Simulator_AIN_V1 import World
 class ParticleFilterPoseEstimator:
 
     # noise says how strong the random noise for each particle should be
-    def __init__(self, noise):
+    def __init__(self):
 
         # protected variables
         self._sigma_motion = np.zeros((3, 3))
         self._T = 0.1  # time step
         self._k_theta = 0.01
         self._particles = []
-        self._number_of_particles = 0
         self._covariance = 0
-        self._noise = noise
-        self._world = None
         self._polar_coordinates = []
         self._estimated_wall_hit_point = []
         self._max_weight_point = []
 
+        self._sigma_noise = np.zeros((2, 2))
+        self._sigma_noise[0, 0] = 0.01  # 0.2 ** 2
+        self._sigma_noise[1, 1] = 0.01  # 0.2 ** 2
+        # self._sigma_noise[2, 2] = (5 * np.pi / 180) ** 2
+
     # create random particles in area (pose_from, pose_to)
     def initialize(self, pose_from, pose_to, n=200):
-        #assert pose_from >= 0, 'pose_from should be greater or equal to 0'
-        #assert pose_to <= 20, 'pose_to mus be lower or equal to 20'
-
-        self._number_of_particles = n
 
         for i in range(n):
-
-            #orientation = np.pi * random.random()
-            #position_x = random.random() * (pose_to[0] - pose_from[0]) + pose_from[0]
-            #position_y = random.random() * (pose_to[1] - pose_from) + pose_from
 
             position_x = random.uniform(pose_from[0], pose_to[0])
             position_y = random.uniform(pose_from[1], pose_to[1])
@@ -44,39 +38,26 @@ class ParticleFilterPoseEstimator:
 
         return self._particles
 
+    # return the list of particles
     def get_particles(self):
         return self._particles
 
+    # returns the point where laser sensor hits the wall
     def get_estimated_wall_hit_point(self):
         return self._estimated_wall_hit_point
-
-    def set_timestep(self, T):
-        self._T = T
-
-    def set_world(self, world):
-        self._world = world
 
     # run motion command on all particles
     # Reminder: motion -> [velocity, omega]
     def integrate_movement(self, motion):
-        v = motion[0]
-        omega = motion[1]
-        #sigma_noise = (self._k_theta / self._T) * abs(omega)  # turning rate noise
-        sigma_noise = np.zeros((2, 2))
-        sigma_noise[0, 0] = 0.01 # 0.2 ** 2
-        sigma_noise[1, 1] = 0.01 # 0.2 ** 2
-        #sigma_noise[2, 2] = (5 * np.pi / 180) ** 2
-
         for i in range(len(self._particles)):
-            v = random.gauss(motion[0], np.sqrt(sigma_noise[0, 0]))
-            omega = random.gauss(motion[1], np.sqrt(sigma_noise[1, 1]))
+            v = random.gauss(motion[0], np.sqrt(self._sigma_noise[0, 0]))
+            omega = random.gauss(motion[1], np.sqrt(self._sigma_noise[1, 1]))
             # Apply noisy motion to particle _particles[i]:
             theta = self._particles[i][2]
             self._particles[i][0] += v * self._T * np.cos(theta)  # x
             self._particles[i][1] += v * self._T * np.sin(theta)  # y
             self._particles[i][2] = (self._particles[i][2] + omega * self._T) % (2 * np.pi)  # orientation
 
-        #self.sigma_pose = F_pos.dot(self.sigma_pose).dot(F_pos.T) + F_motion.dot(sigma_motion).dot(F_motion.T)
         return
 
     # weight all particles with likelihoodfield-algorythm and resample
@@ -85,9 +66,23 @@ class ParticleFilterPoseEstimator:
     # alpha_list: Datas of robot sensors (angle ??)
     # distant_map: Type of 'myWorld.getDistanceGrid()'
     def integrated_measurement(self, dist_list, alpha_list, distant_map):
-        # assert type(World) is distant_map, 'distant map has to be a type of the call World.getDistanceGrird()'
-        pass
-        #resampling()
+
+        polar_coordinates = []
+        for p in self._particles:
+            for index, s in np.ndenumerate(dist_list):
+                if s is not None:
+                    x_cord = s * np.cos(np.radians(alpha_list[0] + p[2]))
+                    y_cord = s * np.sin(np.radians(alpha_list[0] + p[2]))
+                    polar_coordinates.append([x_cord, y_cord, 0])
+                    polar_coordinates.append([x_cord, y_cord, 0])
+
+                    hood_value = distant_map.getValue(x_cord, y_cord)
+
+                    # set the actual weight of a particle
+                    if hood_value < 1:
+                        p[3] += 1
+
+        self._polar_coordinates = polar_coordinates
 
     # calc average pose
     def get_pose(self):

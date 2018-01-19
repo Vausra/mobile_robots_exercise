@@ -12,10 +12,9 @@ from ParticleFilterPoseEstimator import ParticleFilterPoseEstimator
 myWorld = simpleWorld.buildWorld()
 
 # this is the likelyhood field
-myGrid = myWorld.getDistanceGrid()
+distance_map = myWorld.getDistanceGrid()
 myRobot = Robot.Robot()
-arra = np.array(myGrid)
-pose_estimator = ParticleFilterPoseEstimator.ParticleFilterPoseEstimator(myGrid)
+pose_estimator = ParticleFilterPoseEstimator.ParticleFilterPoseEstimator()
 
 #myGrid.drawGrid() # works, uncomment it to show the grid
 
@@ -42,18 +41,10 @@ if __name__ == '__main__':
     pose_estimator.initialize(pose_from, pose_to, 2)
     myWorld.drawPoints(pose_estimator.get_particles(), 'green')
 
-    dists = myRobot.sense()
-    sensor_directions = myRobot.getSensorDirections()
+    dist_list = myRobot.sense()
+    alpha_list = myRobot.getSensorDirections()
 
-    polar_coordinates = pose_estimator.get_dist_list(dists, r_orientation)
-    pose_estimator.set_weight_of_particle(myGrid)
-
-    #pose_estimator.particles_match(dists, myGrid)
-
-    weighted_particles = pose_estimator.get_particles()
-    estimated_wall_hit_point = pose_estimator.get_estimated_wall_hit_point()
-
-    #myWorld.drawPoints(estimated_wall_hit_point, 'orange') # draws a point on the coordinate where laser hits wall (seen by particle)
+    test = pose_estimator.integrated_measurement(dist_list, alpha_list, distance_map)
 
     n = 100
 
@@ -61,10 +52,7 @@ if __name__ == '__main__':
 
     for i in range(n):
 
-        orientation = myWorld.getTrueRobotPose()[2]
         dists = myRobot.sense()
-        polar_coordinates = pose_estimator.get_dist_list(dists, orientation)
-        pose_estimator.set_weight_of_particle(myGrid)
 
         motion = motionCircle[i]
         myRobot.move(motion)
