@@ -105,6 +105,7 @@ class World:
 
         # Drawn (several!) polylines:
         self._drawnPolylines = []
+        self._drawnPoints = []
 
     # --------
     # Draw a polyline.
@@ -149,6 +150,30 @@ class World:
     # --------
     # Undraw the polyline.
     #
+
+    def drawPoints(self, points, color='red'):
+        for p in points:
+            self.drawPoint(p, color)
+
+    def drawPoint(self, point, color='red'):
+        c = Circle(Point(point[0], point[1]), 0.05)
+        c.draw(self._win)
+        c.setFill(color)
+        c.setOutline(color)
+        c.setWidth(0.05)
+        self.drawArrow(point)
+        self._drawnPoints.append(c)
+
+    def drawArrow(self, point, color='blue'):
+        x = point[0] + (point[0] * cos(degrees(point[2])) * 0.025)
+        y = point[1] + (point[1] * sin(degrees(point[2])) * 0.025)
+        l = Line(Point(point[0], point[1]), Point(x, y))
+        l.draw(self._win)
+        l.setFill(color)
+        l.setWidth(0.05)
+        self._drawnPoints.append(l)
+
+
     def undrawLines(self):
         if self._drawnPolylines == []:
             return
@@ -156,6 +181,13 @@ class World:
             for l in polyline:
                 l.undraw()
         self._drawnPolylines = []
+
+    def undrawPoints(self):
+        if self._drawnPoints == []:
+            return
+        for point in self._drawnPoints:
+                point.undraw()
+        self._drawnPoints = []
 
 
     # --------
