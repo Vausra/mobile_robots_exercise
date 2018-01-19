@@ -13,11 +13,15 @@ class ParticleFilterPoseEstimator:
         # protected variables
         self._sigma_motion = np.zeros((3, 3))
         self._T = 0.1  # time step
+        self._k_theta = 0.01
         self._particles = []
         self._number_of_particles = 0
         self._covariance = 0
         self._noise = noise
         self._world = None
+        self._polar_coordinates = []
+        self._estimated_wall_hit_point = []
+        self._max_weight_point = []
 
     # create random particles in area (pose_from, pose_to)
     def initialize(self, pose_from, pose_to, n=200):
@@ -43,6 +47,9 @@ class ParticleFilterPoseEstimator:
     def get_particles(self):
         return self._particles
 
+    def get_estimated_wall_hit_point(self):
+        return self._estimated_wall_hit_point
+
     def set_timestep(self, T):
         self._T = T
 
@@ -51,30 +58,35 @@ class ParticleFilterPoseEstimator:
 
     # run motion command on all particles
     # Reminder: motion -> [velocity, omega]
-    '''def integrate_movement(self, motion):
+    def integrate_movement(self, motion):
         v = motion[0]
         omega = motion[1]
-        sigma_noise = (self._k_theta / self._T) * abs(omega)  # turning rate noise
+        #sigma_noise = (self._k_theta / self._T) * abs(omega)  # turning rate noise
+        sigma_noise = np.zeros((2, 2))
+        sigma_noise[0, 0] = 0.01 # 0.2 ** 2
+        sigma_noise[1, 1] = 0.01 # 0.2 ** 2
+        #sigma_noise[2, 2] = (5 * np.pi / 180) ** 2
 
         for i in range(len(self._particles)):
-            v = random.gauss(motion[0], np.sqrt(sigma_motion[0, 0]))
-            omega = random.gauss(motion[1], np.sqrt(sigma_motion[1, 1]))
+            v = random.gauss(motion[0], np.sqrt(sigma_noise[0, 0]))
+            omega = random.gauss(motion[1], np.sqrt(sigma_noise[1, 1]))
             # Apply noisy motion to particle _particles[i]:
             theta = self._particles[i][2]
-            self._particles[i][0] += v * self.T * np.cos(theta)  # x
-            self._particles[i][1] += v * self.T * np.sin(theta)  # y
-            self._particles[i][2] = (self._particles[i][2] + omega * self.T) % (2 * np.pi)  # orientation
+            self._particles[i][0] += v * self._T * np.cos(theta)  # x
+            self._particles[i][1] += v * self._T * np.sin(theta)  # y
+            self._particles[i][2] = (self._particles[i][2] + omega * self._T) % (2 * np.pi)  # orientation
 
         #self.sigma_pose = F_pos.dot(self.sigma_pose).dot(F_pos.T) + F_motion.dot(sigma_motion).dot(F_motion.T)
         return
-'''
+
     # weight all particles with likelihoodfield-algorythm and resample
     #
-    # dist_list:
+    # dist_list: Datas or robot sensors (distance to measured point, None if laser measured nothing)
+    # alpha_list: Datas of robot sensors (angle ??)
     # distant_map: Type of 'myWorld.getDistanceGrid()'
     def integrated_measurement(self, dist_list, alpha_list, distant_map):
-        assert type(World) is distant_map, 'distant map has to be a type of the call World.getDistanceGrird()'
-
+        # assert type(World) is distant_map, 'distant map has to be a type of the call World.getDistanceGrird()'
+        pass
         #resampling()
 
     # calc average pose
@@ -97,13 +109,70 @@ class ParticleFilterPoseEstimator:
 
         return cov
 
-    def calcCordsFromDistance(self, senseData):
-        estimations = []
+    # Takes robot sensor data transfer it to polarcoordinates of particle
+    #
+    # return polar_coordinate as array where laser hits wall (seen by robot sensors)
+    def get_dist_list(self, senseData, robot_orientation):
+        polar_coordinates = []
         for index, s in np.ndenumerate(senseData):
             if s is not None:
-                grad = (index[0] * 10) + 45
+                grad = (index[0] * 10) + 45 + np.degrees(robot_orientation)
                 x_cord = s * np.cos(np.radians(grad))
                 y_cord = s * np.sin(np.radians(grad))
-                estimations.append([x_cord, y_cord, 0])
+                polar_coordinates.append([x_cord, y_cord, 0])
+        self._polar_coordinates = polar_coordinates
+        return polar_coordinates
 
-        return estimations
+
+    def set_weight_of_particle(self, grid):    # instead: set_weight method ??
+        for p in self._particles:
+            for e in self._polar_coordinates: # wall hit pint particle polar coordinate + dist of a laser
+                x_estimated = p[0] - e[0]
+                y_estimated = p[1] - e[1]
+
+                self._estimated_wall_hit_point.append([x_estimated, y_estimated, 0])
+
+                x_res = np.round(x_estimated)
+                y_res = np.round(y_estimated)
+                hood_value = grid.getValue(x_res, y_res)
+
+                # set the actual weight of a particle
+                if hood_value < 1:
+                    p[3] += 1
+
+
+    def particles_match(self, senseData, grid):
+        for p in self._particles:
+            for index, s in np.ndenumerate(senseData):
+                if s is not None:
+                    grad = (index[0] * 10) + 45 + np.degrees(p[3])
+                    x_cord = s * np.cos(np.radians(grad))
+                    y_cord = s * np.sin(np.radians(grad))
+
+                    x_estimated = p[0] - x_cord
+                    y_estimated = p[1] - y_cord
+
+                    self._estimated_wall_hit_point.append([x_estimated, y_estimated, 0])
+
+                    x_res = np.round(x_estimated)
+                    y_res = np.round(y_estimated)
+                    hood_value = grid.getValue(x_res, y_res)
+
+                    if hood_value >= 1 and hood_value < 2:
+                        p[3] += 1
+
+
+    # get the particle with the maximum weight (just pick one if several have the same weight)
+    def analyze_particles(self):
+        self._max_weight_point = [0,0,0,0]
+
+        for p in self._particles:
+            if p[3] >= self._max_weight_point[3]:
+                self._max_weight_point = p
+
+
+    def reposition_particles(self):
+        for p in self._particles:
+            p[0] = self._max_weight_point[0]
+            p[1] = self._max_weight_point[1]
+            p[2] = self._max_weight_point[2]

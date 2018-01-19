@@ -165,8 +165,8 @@ class World:
         self._drawnPoints.append(c)
 
     def drawArrow(self, point, color='blue'):
-        x = point[0] + (point[0] * cos(degrees(point[2])) * 0.025)
-        y = point[1] + (point[1] * sin(degrees(point[2])) * 0.025)
+        x = point[0] + np.cos(point[2]) * 0.25
+        y = point[1] + np.sin(point[2]) * 0.25
         l = Line(Point(point[0], point[1]), Point(x, y))
         l.draw(self._win)
         l.setFill(color)

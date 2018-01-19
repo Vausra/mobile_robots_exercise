@@ -2,7 +2,7 @@
 import numpy as np
 
 from HTWG_Robot_Simulator_AIN_V1 import Robot
-from HTWG_Robot_Simulator_AIN_V1 import simpleWorld
+from HTWG_Robot_Simulator_AIN_V1.worlds import simpleWorld
 from HTWG_Robot_Simulator_AIN_V1 import PlotUtilities
 from HTWG_Robot_Simulator_AIN_V1 import OdometryPoseEstimator
 from HTWG_Robot_Simulator_AIN_V1 import SensorUtilities
@@ -26,53 +26,57 @@ def plot_result(pos_true, pos_odo):
 
 if __name__ == '__main__':
     T = 0.1 # timestamp for robot
-    pose_from = [8, 6, 0]
-    pose_to = [10, 8, np.pi/2]
+
+    r_orientation = np.pi / 2
+    robot_initial_pose = [6, 6, r_orientation]
+
+
+    pose_from = [robot_initial_pose[0]-1, robot_initial_pose[1]-1, robot_initial_pose[2] * 0]
+    pose_to = [robot_initial_pose[0]+1, robot_initial_pose[1]+1, robot_initial_pose[2] * 1]
 
     print("distance grid generated")
     myRobot.setTimeStep(T)
-    myWorld.setRobot(myRobot, [9, 7, 0])
 
-    pose_estimator.initialize(pose_from, pose_to, 200)
+    myWorld.setRobot(myRobot, robot_initial_pose)
+
+    pose_estimator.initialize(pose_from, pose_to, 2)
     myWorld.drawPoints(pose_estimator.get_particles(), 'green')
-    particles = pose_estimator.get_particles()
 
     dists = myRobot.sense()
+    sensor_directions = myRobot.getSensorDirections()
 
-    estimations = pose_estimator.calcCordsFromDistance(dists)
+    polar_coordinates = pose_estimator.get_dist_list(dists, r_orientation)
+    pose_estimator.set_weight_of_particle(myGrid)
 
-    for p in particles:
-        for e in estimations:
-            x_estimated = p[0] - e[0]
-            y_estimated = p[1] - e[1]
-            x_res = np.round(x_estimated)
-            y_res = np.round(y_estimated)
-            hood_value = myGrid.getValue(x_res, y_res)
-            myWorld.drawPoint([x_estimated, y_estimated, 0], 'orange')
+    #pose_estimator.particles_match(dists, myGrid)
 
-            if hood_value > 1:
-                p[3] += 1
+    weighted_particles = pose_estimator.get_particles()
+    estimated_wall_hit_point = pose_estimator.get_estimated_wall_hit_point()
 
+    #myWorld.drawPoints(estimated_wall_hit_point, 'orange') # draws a point on the coordinate where laser hits wall (seen by particle)
 
-    best_particles = []
-    for p in particles:
-        if p[3] >= 10:
-            best_particles.append(p)
+    n = 100
 
-    #myWorld.undrawPoints()
+    motionCircle = [[1, -24 * np.pi / 270] for i in range(n)]
 
-    myWorld.drawPoints(best_particles, 'red')
+    for i in range(n):
+
+        orientation = myWorld.getTrueRobotPose()[2]
+        dists = myRobot.sense()
+        polar_coordinates = pose_estimator.get_dist_list(dists, orientation)
+        pose_estimator.set_weight_of_particle(myGrid)
+
+        motion = motionCircle[i]
+        myRobot.move(motion)
+        pose_estimator.integrate_movement(motion)
+
+        pose_estimator.analyze_particles()
+        pose_estimator.reposition_particles()
+
+        if i % 5 == 0:
+            myWorld.undrawPoints()
+            myWorld.drawPoints(pose_estimator.get_estimated_wall_hit_point(), 'orange')
+            #myWorld.drawPoints(pose_estimator.get_particles(), 'brown')
+
 
     myWorld.close(True)
-
-    #n = 110
-
-    #motionCircle = [[1, -24 * np.pi / 270] for i in range(n)]
-
-    #for i in range(n):
-        #motion = motionCircle[i]
-        #myRobot.move(motion)
-        #pose_estimator.integrate_movement(motion)
-
-        #particles = pose_estimator.get_particles()
-        #PlotUtilities.plotPositionParticles(particles)
