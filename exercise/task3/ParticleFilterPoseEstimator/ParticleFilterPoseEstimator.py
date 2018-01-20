@@ -72,6 +72,7 @@ class ParticleFilterPoseEstimator:
 
         polar_coordinates = []
         for p in self._particles: # iterate over pixels and transform robot laser beams
+            p[3] = 0
             for index, dist in np.ndenumerate(dist_list):
                 if dist is not None:
                     x_cord = dist * np.cos(alpha_list[index[0]] + p[2]) + p[0]
