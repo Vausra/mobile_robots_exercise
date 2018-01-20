@@ -20,9 +20,6 @@ class ParticleFilterPoseEstimator:
         self._best_particles = [] # in every step a new list of best particles (chosen by max weight)
 
         self._covariance = 0
-        self._polar_coordinates = []
-        self._estimated_wall_hit_point = []
-        self._max_weight_point = []
 
         self._sigma_noise = np.zeros((2, 2))
 
@@ -44,13 +41,11 @@ class ParticleFilterPoseEstimator:
 
         return self._particles
 
+
     # return the list of particles
     def get_particles(self):
         return self._particles
 
-    # returns the point where laser sensor hits the wall
-    def get_estimated_wall_hit_point(self):
-        return self._estimated_wall_hit_point
 
     # run motion command on all particles
     # Reminder: motion -> [velocity, omega]
@@ -86,6 +81,7 @@ class ParticleFilterPoseEstimator:
                     hood_value = distant_map.getValue(x_cord, y_cord)
                     if hood_value is None: # If measured point of a particle is negative
                         p[3] *= 0.00001
+                        continue
 
                     probability = scipy.stats.norm(0, 0.5).pdf(hood_value)
                     p[3] *= probability
@@ -95,6 +91,8 @@ class ParticleFilterPoseEstimator:
 
     # calc average pose
     def get_pose(self):
+        # TODO: Calc pose
+
         return self._pose
 
     # calc covarianz inside particle set
@@ -113,10 +111,28 @@ class ParticleFilterPoseEstimator:
 
         return cov
 
-    def resampling(self):
+    def resample(self):
+        wheel = []
         weight_sum = 0
-        for p in self._particles:
-            weight_sum += p[3]
+        randome_particles = []
+        particles_old = self._particles
 
-        speichenabstand = weight_sum / len(self._particles)
-        rand_value = np.random.randint(0, speichenabstand)
+        for index in range(len(self._particles)):
+            weight_sum += self._particles[index][3]
+            wheel.append(weight_sum)
+
+        # Roulett
+        # TODO: implement binary search tree
+        for _ in range(len(self._particles)):
+            r = np.random.uniform(0, weight_sum)
+
+            for index_weight in range(len(wheel)):
+                if r <= wheel[index_weight]:
+                    randome_particles.append(self._particles[index_weight])
+                    break
+
+        # TODO: Rework this. Set particles to new position with new direction
+        for point_index in range(len(particles_old)):
+            self._particles[0] = randome_particles[point_index][0]
+            self._particles[1] = randome_particles[point_index][1]
+            self._particles[2] = randome_particles[point_index][2]
