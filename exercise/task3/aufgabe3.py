@@ -13,6 +13,7 @@ myWorld = simpleWorld.buildWorld()
 
 # this is the likelyhood field
 distance_map = myWorld.getDistanceGrid()
+
 myRobot = Robot.Robot()
 pose_estimator = ParticleFilterPoseEstimator.ParticleFilterPoseEstimator()
 
@@ -27,7 +28,7 @@ if __name__ == '__main__':
     T = 0.1 # timestamp for robot
 
     r_orientation = np.pi / 2
-    robot_initial_pose = [6, 6, r_orientation]
+    robot_initial_pose = [4, 4, r_orientation]
 
 
     pose_from = [robot_initial_pose[0]-1, robot_initial_pose[1]-1, robot_initial_pose[2] * 0]
@@ -38,13 +39,14 @@ if __name__ == '__main__':
 
     myWorld.setRobot(myRobot, robot_initial_pose)
 
-    pose_estimator.initialize(pose_from, pose_to, 2)
+    pose_estimator.initialize(pose_from, pose_to, 20)
     myWorld.drawPoints(pose_estimator.get_particles(), 'green')
 
     dist_list = myRobot.sense()
     alpha_list = myRobot.getSensorDirections()
 
     test = pose_estimator.integrated_measurement(dist_list, alpha_list, distance_map)
+    myWorld.drawPoints(test, 'orange')
 
     n = 100
 
@@ -58,13 +60,12 @@ if __name__ == '__main__':
         myRobot.move(motion)
         pose_estimator.integrate_movement(motion)
 
-        pose_estimator.analyze_particles()
-        pose_estimator.reposition_particles()
-
         if i % 5 == 0:
-            myWorld.undrawPoints()
-            myWorld.drawPoints(pose_estimator.get_estimated_wall_hit_point(), 'orange')
-            #myWorld.drawPoints(pose_estimator.get_particles(), 'brown')
+            # myWorld.undrawPoints()
+            test = pose_estimator.integrated_measurement(dist_list, alpha_list, distance_map)
+            myWorld.drawPoints(test, 'orange') # draw hitpoints: laser -> wall
+
+            myWorld.drawPoints(pose_estimator.get_particles(), 'brown') # Draw resampled particles NOTE: For now does not work
 
 
     myWorld.close(True)

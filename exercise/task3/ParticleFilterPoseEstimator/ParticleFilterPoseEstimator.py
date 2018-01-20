@@ -11,6 +11,7 @@ class ParticleFilterPoseEstimator:
     def __init__(self):
 
         # protected variables
+        self._pose = []
         self._sigma_motion = np.zeros((3, 3))
         self._T = 0.1  # time step
         self._k_theta = 0.01
@@ -21,6 +22,8 @@ class ParticleFilterPoseEstimator:
         self._max_weight_point = []
 
         self._sigma_noise = np.zeros((2, 2))
+
+        # TODO: Set this by param
         self._sigma_noise[0, 0] = 0.01  # 0.2 ** 2
         self._sigma_noise[1, 1] = 0.01  # 0.2 ** 2
         # self._sigma_noise[2, 2] = (5 * np.pi / 180) ** 2
@@ -60,7 +63,7 @@ class ParticleFilterPoseEstimator:
 
         return
 
-    # weight all particles with likelihoodfield-algorythm and resample
+    # weight all particles with likelihoodfield and resample
     #
     # dist_list: Datas or robot sensors (distance to measured point, None if laser measured nothing)
     # alpha_list: Datas of robot sensors (angle ??)
@@ -68,21 +71,24 @@ class ParticleFilterPoseEstimator:
     def integrated_measurement(self, dist_list, alpha_list, distant_map):
 
         polar_coordinates = []
-        for p in self._particles:
-            for index, s in np.ndenumerate(dist_list):
-                if s is not None:
-                    x_cord = s * np.cos(np.radians(alpha_list[0] + p[2]))
-                    y_cord = s * np.sin(np.radians(alpha_list[0] + p[2]))
+        for p in self._particles: # iterate over pixels and transform robot laser beams
+            for index, dist in np.ndenumerate(dist_list):
+                if dist is not None:
+                    x_cord = dist * np.cos(alpha_list[index[0]] + p[2]) + p[0]
+                    y_cord = dist * np.sin(alpha_list[index[0]] + p[2]) + p[1]
                     polar_coordinates.append([x_cord, y_cord, 0])
                     polar_coordinates.append([x_cord, y_cord, 0])
 
                     hood_value = distant_map.getValue(x_cord, y_cord)
+                    if hood_value is None: # If measured point of a particle is negative
+                        continue
 
                     # set the actual weight of a particle
                     if hood_value < 1:
                         p[3] += 1
 
         self._polar_coordinates = polar_coordinates
+        return polar_coordinates
 
     # calc average pose
     def get_pose(self):
