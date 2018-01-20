@@ -1,6 +1,7 @@
 import numpy as np
 import numpy.linalg as la
 import random
+import scipy.stats
 import Particle
 from HTWG_Robot_Simulator_AIN_V1 import World
 
@@ -16,6 +17,8 @@ class ParticleFilterPoseEstimator:
         self._T = 0.1  # time step
         self._k_theta = 0.01
         self._particles = []
+        self._best_particles = [] # in every step a new list of best particles (chosen by max weight)
+
         self._covariance = 0
         self._polar_coordinates = []
         self._estimated_wall_hit_point = []
@@ -72,7 +75,7 @@ class ParticleFilterPoseEstimator:
 
         polar_coordinates = []
         for p in self._particles: # iterate over pixels and transform robot laser beams
-            p[3] = 0
+            p[3] = 1
             for index, dist in np.ndenumerate(dist_list):
                 if dist is not None:
                     x_cord = dist * np.cos(alpha_list[index[0]] + p[2]) + p[0]
@@ -82,11 +85,10 @@ class ParticleFilterPoseEstimator:
 
                     hood_value = distant_map.getValue(x_cord, y_cord)
                     if hood_value is None: # If measured point of a particle is negative
-                        continue
+                        p[3] *= 0.00001
 
-                    # set the actual weight of a particle
-                    if hood_value < 1:
-                        p[3] += 1
+                    probability = scipy.stats.norm(0, 0.5).pdf(hood_value)
+                    p[3] *= probability
 
         self._polar_coordinates = polar_coordinates
         return polar_coordinates
@@ -111,70 +113,10 @@ class ParticleFilterPoseEstimator:
 
         return cov
 
-    # Takes robot sensor data transfer it to polarcoordinates of particle
-    #
-    # return polar_coordinate as array where laser hits wall (seen by robot sensors)
-    def get_dist_list(self, senseData, robot_orientation):
-        polar_coordinates = []
-        for index, s in np.ndenumerate(senseData):
-            if s is not None:
-                grad = (index[0] * 10) + 45 + np.degrees(robot_orientation)
-                x_cord = s * np.cos(np.radians(grad))
-                y_cord = s * np.sin(np.radians(grad))
-                polar_coordinates.append([x_cord, y_cord, 0])
-        self._polar_coordinates = polar_coordinates
-        return polar_coordinates
-
-
-    def set_weight_of_particle(self, grid):    # instead: set_weight method ??
+    def resampling(self):
+        weight_sum = 0
         for p in self._particles:
-            for e in self._polar_coordinates: # wall hit pint particle polar coordinate + dist of a laser
-                x_estimated = p[0] - e[0]
-                y_estimated = p[1] - e[1]
+            weight_sum += p[3]
 
-                self._estimated_wall_hit_point.append([x_estimated, y_estimated, 0])
-
-                x_res = np.round(x_estimated)
-                y_res = np.round(y_estimated)
-                hood_value = grid.getValue(x_res, y_res)
-
-                # set the actual weight of a particle
-                if hood_value < 1:
-                    p[3] += 1
-
-
-    def particles_match(self, senseData, grid):
-        for p in self._particles:
-            for index, s in np.ndenumerate(senseData):
-                if s is not None:
-                    grad = (index[0] * 10) + 45 + np.degrees(p[3])
-                    x_cord = s * np.cos(np.radians(grad))
-                    y_cord = s * np.sin(np.radians(grad))
-
-                    x_estimated = p[0] - x_cord
-                    y_estimated = p[1] - y_cord
-
-                    self._estimated_wall_hit_point.append([x_estimated, y_estimated, 0])
-
-                    x_res = np.round(x_estimated)
-                    y_res = np.round(y_estimated)
-                    hood_value = grid.getValue(x_res, y_res)
-
-                    if hood_value >= 1 and hood_value < 2:
-                        p[3] += 1
-
-
-    # get the particle with the maximum weight (just pick one if several have the same weight)
-    def analyze_particles(self):
-        self._max_weight_point = [0,0,0,0]
-
-        for p in self._particles:
-            if p[3] >= self._max_weight_point[3]:
-                self._max_weight_point = p
-
-
-    def reposition_particles(self):
-        for p in self._particles:
-            p[0] = self._max_weight_point[0]
-            p[1] = self._max_weight_point[1]
-            p[2] = self._max_weight_point[2]
+        speichenabstand = weight_sum / len(self._particles)
+        rand_value = np.random.randint(0, speichenabstand)
