@@ -31,15 +31,15 @@ if __name__ == '__main__':
     robot_initial_pose = [7, 7, r_orientation]
 
 
-    pose_from = [robot_initial_pose[0], robot_initial_pose[1], robot_initial_pose[2] * 0]
-    pose_to = [robot_initial_pose[0], robot_initial_pose[1], robot_initial_pose[2] * 4]
+    pose_from = [robot_initial_pose[0] - 1, robot_initial_pose[1] - 1, robot_initial_pose[2] * 0]
+    pose_to = [robot_initial_pose[0] + 1, robot_initial_pose[1] + 1, robot_initial_pose[2] * 4]
 
     print("distance grid generated")
     myRobot.setTimeStep(T)
 
     myWorld.setRobot(myRobot, robot_initial_pose)
 
-    pose_estimator.initialize(pose_from, pose_to, 10)
+    pose_estimator.initialize(pose_from, pose_to, 20)
     myWorld.drawPoints(pose_estimator.get_particles(), 'green')
 
     dist_list = myRobot.sense()
@@ -60,13 +60,13 @@ if __name__ == '__main__':
         motion = motionCircle[i]
         myRobot.move(motion)
         pose_estimator.integrate_movement(motion)
+        test = pose_estimator.integrated_measurement(dist_list, alpha_list, distance_map)
+        pose_estimator.resample()
 
         if i % 5 == 0:
-            #myWorld.undrawPoints()
-            test = pose_estimator.integrated_measurement(dist_list, alpha_list, distance_map)
-            myWorld.drawPoints(test, 'orange') # draw hitpoints: laser -> wall
+            myWorld.undrawPoints()
 
-            pose_estimator.resample()
+            # myWorld.drawPoints(test, 'orange') # draw hitpoints: laser -> wall
             myWorld.drawPoints(pose_estimator.get_particles(), 'brown') # Draw resampled particles NOTE: For now does not work
 
 

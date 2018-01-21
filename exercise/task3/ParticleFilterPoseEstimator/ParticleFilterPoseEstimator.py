@@ -13,11 +13,10 @@ class ParticleFilterPoseEstimator:
 
         # protected variables
         self._pose = []
-        self._sigma_motion = np.zeros((3, 3))
         self._T = 0.1  # time step
-        self._k_theta = 0.01
         self._particles = []
-        self._best_particles = [] # in every step a new list of best particles (chosen by max weight)
+
+        self._polar_coordinates = []
 
         self._covariance = 0
 
@@ -53,7 +52,8 @@ class ParticleFilterPoseEstimator:
         for i in range(len(self._particles)):
             v = random.gauss(motion[0], np.sqrt(self._sigma_noise[0, 0]))
             omega = random.gauss(motion[1], np.sqrt(self._sigma_noise[1, 1]))
-            # Apply noisy motion to particle _particles[i]:
+
+            # Add noise to particle pose
             theta = self._particles[i][2]
             self._particles[i][0] += v * self._T * np.cos(theta)  # x
             self._particles[i][1] += v * self._T * np.sin(theta)  # y
@@ -61,10 +61,10 @@ class ParticleFilterPoseEstimator:
 
         return
 
-    # weight all particles with likelihoodfield and resample
+    # weight all particles with likelihood-field and resample
     #
     # dist_list: Datas or robot sensors (distance to measured point, None if laser measured nothing)
-    # alpha_list: Datas of robot sensors (angle ??)
+    # alpha_list: Datas of robot sensors (angle to each other from right to left (negative to postive) as radians)
     # distant_map: Type of 'myWorld.getDistanceGrid()'
     def integrated_measurement(self, dist_list, alpha_list, distant_map):
 
@@ -81,10 +81,10 @@ class ParticleFilterPoseEstimator:
                     hood_value = distant_map.getValue(x_cord, y_cord)
                     if hood_value is None: # If measured point of a particle is negative
                         p[3] *= 0.00001
-                        continue
+                    else:
+                        probability = scipy.stats.norm(0, 0.5).pdf(hood_value)
+                        p[3] *= probability
 
-                    probability = scipy.stats.norm(0, 0.5).pdf(hood_value)
-                    p[3] *= probability
 
         self._polar_coordinates = polar_coordinates
         return polar_coordinates
@@ -111,28 +111,41 @@ class ParticleFilterPoseEstimator:
 
         return cov
 
+    # TODO: wrong particle is picked
     def resample(self):
-        wheel = []
-        weight_sum = 0
-        randome_particles = []
+        wheel = [0]
         particles_old = self._particles
 
-        for index in range(len(self._particles)):
-            weight_sum += self._particles[index][3]
-            wheel.append(weight_sum)
+        for idx in range(len(self._particles)):
+            wheel.append(wheel[idx] + self._particles[idx][3])
 
         # Roulett
-        # TODO: implement binary search tree
-        for _ in range(len(self._particles)):
-            r = np.random.uniform(0, weight_sum)
+        for idx in range(len(self._particles)):
+            r = np.random.uniform(0, wheel[len(wheel) - 1])
 
-            for index_weight in range(len(wheel)):
-                if r <= wheel[index_weight]:
-                    randome_particles.append(self._particles[index_weight])
+            # Binary search
+            # see https://en.wikipedia.org/wiki/Binary_search_algorithm
+            left = 0
+            right = len(particles_old) - 1
+            while left <= right:
+                m = int((left + right) / 2)
+
+                if r < wheel[m]:
+                    left = m + 1
+                elif r > wheel[m]:
+                    right = m - 1
+                else:
                     break
 
-        # TODO: Rework this. Set particles to new position with new direction
-        for point_index in range(len(particles_old)):
-            self._particles[0] = randome_particles[point_index][0]
-            self._particles[1] = randome_particles[point_index][1]
-            self._particles[2] = randome_particles[point_index][2]
+            self._particles[idx][0] = particles_old[m][0]
+            self._particles[idx][1] = particles_old[m][1]
+            self._particles[idx][2] = particles_old[m][2]
+
+            '''
+            print(self._particles[idx])
+            print("End")
+            '''
+
+
+
+
