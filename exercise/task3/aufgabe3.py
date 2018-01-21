@@ -29,7 +29,7 @@ if __name__ == '__main__':
 
     r_orientation = np.pi / 2
     robot_initial_pose = [7, 7, r_orientation]
-
+    number_of_particles = 200
 
     pose_from = [robot_initial_pose[0] - 1, robot_initial_pose[1] - 1, robot_initial_pose[2] * 0]
     pose_to = [robot_initial_pose[0] + 1, robot_initial_pose[1] + 1, robot_initial_pose[2] * 4]
@@ -39,15 +39,21 @@ if __name__ == '__main__':
 
     myWorld.setRobot(myRobot, robot_initial_pose)
 
-    pose_estimator.initialize(pose_from, pose_to, 20)
+    pose_estimator.initialize(pose_from, pose_to, number_of_particles)
     myWorld.drawPoints(pose_estimator.get_particles(), 'green')
 
     dist_list = myRobot.sense()
     alpha_list = myRobot.getSensorDirections()
 
-    test = pose_estimator.integrated_measurement(dist_list, alpha_list, distance_map)
-    myWorld.drawPoints(test, 'orange')
+    position_lost = pose_estimator.integrated_measurement(dist_list, alpha_list, distance_map)
+    #if position_lost:
+    #    pose = myWorld.getTrueRobotPose()
+    #    pose_from = [pose[0] - 1 , pose[1] - 1, pose[2] * 0 ]
+    #    pose_to = [pose[0] + 1 , pose[1] + 1, pose[2] * 4 ]
+    #    pose_estimator.initialize(pose_from, pose_to, number_of_particles)
+    #myWorld.drawPoints(test, 'orange')
 
+    pose_estimator.integrated_measurement(dist_list, alpha_list, distance_map)
     n = 100
 
     motionCircle = [[1, -24 * np.pi / 270] for i in range(n)]
@@ -60,10 +66,18 @@ if __name__ == '__main__':
         motion = motionCircle[i]
         myRobot.move(motion)
         pose_estimator.integrate_movement(motion)
-        test = pose_estimator.integrated_measurement(dist_list, alpha_list, distance_map)
+        position_lost = pose_estimator.integrated_measurement(dist_list, alpha_list, distance_map)
+
+        #if position_lost:
+        #    pose = myWorld.getTrueRobotPose()
+        #    pose_from = [pose[0] - 4, pose[1] - 4, pose[2] * 0]
+        #    pose_to = [pose[0] + 4, pose[1] + 4, pose[2] * 4]
+        #    pose_estimator.initialize(pose_from, pose_to, number_of_particles)
+
+        #pose_estimator.integrated_measurement(dist_list, alpha_list, distance_map)
         pose_estimator.resample()
 
-        if i % 5 == 0:
+        if i % 1 == 0:
             myWorld.undrawPoints()
 
             # myWorld.drawPoints(test, 'orange') # draw hitpoints: laser -> wall
