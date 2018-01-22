@@ -71,9 +71,6 @@ def plotShow():
     plt.axis('equal')
     plt.grid()
     plt.show()
-    #plt.show(block=False)
-    #time.sleep(2)
-    #plt.close()
     return
 
 
